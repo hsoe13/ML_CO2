@@ -1,0 +1,247 @@
+---
+title: "restart_code"
+output:
+  html_document: default
+  pdf_document: default
+date: "2023-03-23"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#highest score code
+library(tree)
+library(gbm)
+library(naniar)
+library(C50)
+library(rpart)
+set.seed(23)
+train <- read.csv("train.csv")
+test <- read.csv("test.csv")
+
+train$orderDate <- (as.Date(train$orderDate, format="%Y-%m-%d"))
+train$deliveryDate <- (as.Date(train$deliveryDate, format="%Y-%m-%d"))
+train$dateOfBirth <- (as.Date(train$dateOfBirth, format="%Y-%m-%d"))
+train$creationDate <- (as.Date(train$creationDate, format="%Y-%m-%d"))
+
+# train[is.na(train$color)==TRUE,]
+test$orderDate <- (as.Date(test$orderDate, format="%Y-%m-%d"))
+test$deliveryDate <- (as.Date(test$deliveryDate, format="%Y-%m-%d"))
+test$dateOfBirth <- (as.Date(test$dateOfBirth, format="%Y-%m-%d"))
+test$creationDate <- (as.Date(test$creationDate, format="%Y-%m-%d"))
+
+train$difference <- ifelse(train$deliveryDate >= train$orderDate, train$deliveryDate - train$orderDate, train$orderDate - train$deliveryDate)
+test$difference <- ifelse(test$deliveryDate >= test$orderDate, test$deliveryDate - test$orderDate, test$orderDate - test$deliveryDate)
+
+train$size <- as.numeric(factor(train$size, labels=unique(train$size)))
+train$color <- as.numeric(factor(train$color, labels=unique(train$color), exclude=NULL))
+train$salutation <- as.numeric(factor(train$salutation, labels=unique(train$salutation)))
+train$state <- as.numeric(factor(train$state, labels=unique(train$state)))
+
+test$size <- as.numeric(factor(test$size, labels=unique(test$size)))
+test$color <- as.numeric(factor(test$color, labels=unique(test$color)))
+test$salutation <- as.numeric(factor(test$salutation, labels=unique(test$salutation)))
+test$state <- as.numeric(factor(test$state, labels=unique(test$state)))
+
+train$color[train$color==86] <- NA
+head(train)
+# train$return <- factor(train$return, levels=c(0,1), labels=c("no", "yes"))
+# train <- train[,-c(1,2,3,4,7,9,11,12,13)]
+# test <- test[,-c(1,2,3,4,7,9,11,12,13)]
+train <- train[,-c(1,2,3,11,13)]
+test <- test[,-c(1,2,3,11,13)]
+train <- na.omit(train)
+train$return <- factor(train$return)
+#C5
+f1 <- C5.0(return~., data=train)
+predict1 <- predict(f1, test, type="prob")
+dataframe1 <- data.frame(return=predict1)
+
+#rpart
+f2 <- rpart(return~., data=train, control=rpart.control(minsplit=2, cp=0.027))
+predict2 <- predict(f2, test, type="prob")
+dataframe2 <- data.frame(return=predict2)
+
+#control
+f3 <- tree(return~., data=train, control=tree.control(nobs=nrow(train), mincut=2, minsize=4, mindev=0.005))
+predict3 <- predict(f3, test, type="vector")
+dataframe3 <- data.frame(return=predict3)
+
+#regression treee
+train$return <- factor(train$return, levels=c(0,1), labels=c("no", "yes"))
+
+f4 <- tree(return~., data=train)
+checking <- cv.tree(f4, FUN=prune.misclass)
+pruning <- prune.misclass(f4, best=2)
+predict4 <- predict(pruning, test, type="vector")
+dataframe4 <- data.frame(return=predict4)
+
+#logistic
+f5 <- glm(return~., data=train, family=binomial)
+predict5 <- predict(f5, test, type="response")
+dataframe5 <- data.frame(return=predict5)
+dataframe5$return <- replace(dataframe5$return, is.na(dataframe5$return), 0.5)
+
+#random forest
+model_forest <- randomForest(return~., data=train, mtry=3, ntree=500) #bag
+prediction_forest <- predict(model_forest, newdata=test, type="prob")
+# prediction_bag <- predict(model_forest_bag)
+dataframe6 <- data.frame(return=prediction_forest[,2])
+dataframe6$return <- replace(dataframe6$return, is.na(dataframe6$return), 0.5)
+dataframe6
+dataframe_return <- cbind(dataframe1$return.1, dataframe2$return.1, dataframe3$return.1, dataframe6$return)
+# dataframe_not <- cbind(dataframe1$return.0, dataframe2$return.0, dataframe3$return.0, dataframe4$return.no, dataframe5$return)
+dataframe_return <- rowSums(dataframe_return) / 4
+# dataframe_not <- rowSums(dataframe_not) / 5
+# data.frame(dataframe_return, dataframe_not)
+# final <- ifelse(dataframe_return>dataframe_not,1,0)
+final <- ifelse(dataframe_return<0.5,0,1)
+write.csv(data.frame(id=1:length(final), return=final), "new1.csv", row.names=FALSE) #don't include
+#I change a lot of things including the highest accuracy score file so the following file above will give slightly different score than highest score
+# data_new1 <- read.csv("new1.csv")
+# data_new <- read.csv("after2.csv")
+# data_n <- read.csv("after5.csv")
+# table(data_new1$return, data_new$return)
+# table(data_n$return, data_new1$return)
+# sapply(data_new1, function(x) sum(is.na(x)))
+# dataframe_return
+```
+
+
+
+
+
+
+```{r}
+### this code is for the improve only but not better accuracy score
+#clean the data
+library(dplyr)
+library(C50)
+library(tree)
+library(randomForest)
+library(rpart)
+library(gbm)
+library(tidyverse)
+library(fastDummies)
+train <- read.csv("train 2.csv")
+test <- read.csv("test 2.csv")
+train$size <- as.numeric(factor(train$size, labels=unique(train$size)))
+train$color <- as.numeric(factor(train$color, labels=unique(train$color), exclude=NULL))
+train$salutation <- as.numeric(factor(train$salutation, labels=unique(train$salutation)))
+train$state <- as.numeric(factor(train$state, labels=unique(train$state)))
+test$size <- as.numeric(factor(test$size, labels=unique(test$size)))
+test$color <- as.numeric(factor(test$color, labels=unique(test$color)))
+test$salutation <- as.numeric(factor(test$salutation, labels=unique(test$salutation)))
+test$state <- as.numeric(factor(test$state, labels=unique(test$state)))
+
+train$orderDate <- (as.Date(train$orderDate, format="%Y-%m-%d"))
+train$deliveryDate <- (as.Date(train$deliveryDate, format="%Y-%m-%d"))
+train$dateOfBirth <- (as.Date(train$dateOfBirth, format="%Y-%m-%d"))
+train$creationDate <- (as.Date(train$creationDate, format="%Y-%m-%d"))
+train$difference <- day(train$deliveryDate) - day(train$orderDate)
+test$orderDate <- (as.Date(test$orderDate, format="%Y-%m-%d"))
+test$deliveryDate <- (as.Date(test$deliveryDate, format="%Y-%m-%d"))
+test$dateOfBirth <- (as.Date(test$dateOfBirth, format="%Y-%m-%d"))
+test$creationDate <- (as.Date(test$creationDate, format="%Y-%m-%d"))
+test$difference <- day(test$deliveryDate) - day(test$orderDate)
+train$order_day <- day(train$orderDate)
+test$order_day <- day(test$orderDate)
+train$order_year <- year(train$orderDate)
+test$order_year <- year(test$orderDate)
+train$deli_year <- year(train$deliveryDate)
+test$deli_year <- year(test$deliveryDate)
+train$deliv_day <- day(train$deliveryDate)
+test$deli_day <- day(test$deliveryDate)
+test$birth_day <- day(test$dateOfBirth)
+train$birth_day <- day(train$dateOfBirth)
+test$birth_month <- month(test$dateOfBirth)
+train$birth_month <- month(train$dateOfBirth)
+train$deliv_month <- month(train$deliveryDate)
+test$deli_month <- month(test$deliveryDate)
+train$order_month <- month(train$orderDate)
+test$order_month <- month(test$orderDate)
+train$creat_day <- day(train$creationDate)
+test$creat_day <- day(test$creationDate)
+train$creat_month <- month(train$creationDate)
+test$creat_month <- month(test$creationDate)
+test$dateOfBirth <- year(test$dateOfBirth)
+test$creationDate <- year(test$creationDate)
+train$dateOfBirth <- year(train$dateOfBirth)
+train$creationDate <- year(train$creationDate)
+train <- train[,-c(1,2,3)]
+test <- test[,-c(1,2,3)]
+train <- train[is.na(train$color)==FALSE,]
+train <- dummy_cols(train, select_columns="size")
+train <- dummy_cols(train, select_columns="salutation")
+train <- dummy_cols(train, select_columns="state")
+train <- dummy_cols(train, select_columns="color")
+test <- dummy_cols(test, select_columns="size")
+test <- dummy_cols(test, select_columns="salutation")
+test <- dummy_cols(test, select_columns="state")
+test <- dummy_cols(test, select_columns="color")
+
+train <- na.omit(train)
+train1 <- train[,colnames(train) %in% colnames(test)]
+test <- test[,colnames(test) %in% colnames(train)]
+train1$return <- train$return
+train1$price <- scale(train1$price)
+test$price <- scale(test$price)
+train1$difference <- abs(train1$difference)
+test$difference <- abs(test$difference)
+
+#rpart
+train1$return <- factor(train1$return)
+f2 <- rpart(return~., data=train1)#, control=rpart.control(minsplit=2, cp=0.027))
+predict2 <- predict(f2, test, type="prob")
+dataframe2 <- data.frame(return=predict2)
+
+row_random <- sample(1:nrow(train1), round(nrow(train1) * 0.50), replace=FALSE)
+f2 <- rpart(return~., data=train1[row_random,])#, control=rpart.control(minsplit=2, cp=0.037))
+predict2 <- predict(f2, train1[-row_random,-215], type="class")
+dataframe2 <- data.frame(return=predict2)
+table(train1[-row_random,215], dataframe2$return)
+nrow(train1[-row_random,])
+#control
+f3 <- tree(return~., data=train1, control=tree.control(nobs=nrow(train1), mincut=2, minsize=4, mindev=0.005))
+predict3 <- predict(f3, test, type="vector")
+dataframe3 <- data.frame(return=predict3)
+
+#regression treee
+train$return <- factor(train1$return, levels=c(0,1), labels=c("no", "yes"))
+f4 <- tree(return~., data=train1)
+checking <- cv.tree(f4, FUN=prune.misclass)
+pruning <- prune.misclass(f4, best=2)
+predict4 <- predict(pruning, test, type="vector")
+dataframe4 <- data.frame(return=predict4)
+
+#random forest will take a long time
+model_forest <- randomForest(return~., data=train1, mtry=3, ntree=500) #bag
+prediction_forest <- predict(model_forest, newdata=test, type="prob")
+dataframe6 <- data.frame(return=prediction_forest[,2])
+dataframe6$return <- replace(dataframe6$return, is.na(dataframe6$return), 0.5)
+dataframe6
+dataframe_return <- cbind(dataframe2$return.1, dataframe6$return)#, dataframe3$return.1, dataframe4$return.yes)#, dataframe6$return)
+# dataframe_not <- cbind(dataframe1$return.0, dataframe2$return.0, dataframe3$return.0, dataframe4$return.no, dataframe5$return)
+dataframe_return <- rowSums(dataframe_return) / 2
+
+final <- ifelse(dataframe_return<0.5,0,1)
+write.csv(data.frame(id=1:length(final), return=final), "new1.csv", row.names=FALSE) #don't include
+plotcp(f2)
+```
+
+
+```{r}
+library(rpart.plot)
+library(tree)
+varImpPlot(model_forest)
+prp(f2, type=4, extra=1, under=TRUE, faclen=0, varlen=0, cex=0.8, box.col="lightgrey", branch.lty=1)
+plot(pruning, main="Pruned Classification Tree")
+text(pruning, all=TRUE, cex=0.8)
+dat2 <- ifelse(dataframe_return<0.5,0,1)
+
+table(dat2)
+```
+
+
