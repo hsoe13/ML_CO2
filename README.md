@@ -1,1 +1,1 @@
-# ML_CO2
+# Environmental Impact Assessment: Machine Learning for Predicting Carbon Emissions Across Africa
